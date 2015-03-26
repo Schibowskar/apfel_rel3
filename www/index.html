@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset=utf-8 />
+<title>Editable table controlling marker data</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!--<meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' /> -->
+<script src='https://api.tiles.mapbox.com/mapbox.js/v2.1.6/mapbox.js'></script>
+<link href='https://api.tiles.mapbox.com/mapbox.js/v2.1.6/mapbox.css' rel='stylesheet' />
+<style>
+  body { margin:0; padding:0; }
+  #map { position:absolute; top:0; bottom:0; width:100%; }
+</style>
+</head>
+<body>
+
+<style>
+.ui-table.handsontable {
+  background:#fff;
+  position:relative;
+  top:10px;
+  right:10px;
+  z-index:100
+  }
+</style>
+
+<div id='table' class='ui-table'></div>
+<div id='map'></div>
+
+<!-- Einbinden von jQuery -->
+<script src='https://code.jquery.com/jquery-1.11.0.min.js'></script>
+<script src='https://code.jquery.com/jquery-migrate-1.2.1.min.js'></script>
+<link href='https://cdnjs.cloudflare.com/ajax/libs/jquery-handsontable/0.10.2/jquery.handsontable.full.min.css' rel='stylesheet' />
+<script src='https://cdnjs.cloudflare.com/ajax/libs/jquery-handsontable/0.10.2/jquery.handsontable.full.min.js'></script>
+
+<script>
+
+//Einbinden der Basemap von Mapbox mittels Access Token und Map-ID
+L.mapbox.accessToken = 'pk.eyJ1Ijoic2NoaWJvd3NrYXIiLCJhIjoiaTZIakNJbyJ9.KjK0r5Pp1rvK9tSUR-g-Bg'; 
+var map = L.mapbox.map('map', 'schibowskar.kejhn34i')
+    .setView([43.945, 19.380], 5);
+
+// Exemplarische Daten fuer die Handsontable 
+// http://handsontable.com/demo/understanding_reference.html
+var data = [{
+    lon: 13.23164,
+    lat: 52.50837,
+    plantid: 1,
+	observsiteid: 712123,
+	phaseid: '1',
+	phasename: 'Bluete',
+	plantspecies: 'Hasel',
+    size: 'small',
+    color: '#c091e6'
+}, {
+    lon: 13.23505,
+    lat: 52.50856,
+    plantid: 2,
+	observsiteid: 712123,
+	phaseid: '52',
+	phasename: 'Blattentfaltung',
+	plantspecies: 'Stachelbeere',
+	size: 'small',
+    color: '#fa946e'
+}];
+
+// Erstellen eines Layers, der die Marker der Tabelle enthaelt:  
+// dies wird in der dataToMarkers function zusammen mit 
+// .setGeoJSON benoetigt, um die Marker-Daten abzudaten
+var dataLayer = L.mapbox.featureLayer().addTo(map);
+
+// Erstellen der Tabelle: 
+// Dokumentation unter:
+// http://handsontable.com/index.html
+$("#table").handsontable({
+  data: data,
+  clickBeginsEditing: true,
+  startRows: 7,
+  startCols: 4,
+	scrollV: 'auto',
+  colHeaders: ['Lon', 'Lat', 'PlantID', 'ObservSiteID', 'PhaseID', 'PhaseName', 'PlantSpecies', 'Size', 'Color'],
+  columnSorting: true,
+  columns: [
+    {
+      data: 'lon',
+      type: 'numeric'
+    },
+    {
+      data: 'lat',
+      type: 'numeric'
+    },
+    {
+      data: 'plantid',
+	  type: 'numeric'
+    },
+	{
+      data: 'observsiteid',
+	  type: 'numeric'
+    },
+	{
+      data: 'phaseid',
+	  editor: 'select',
+      selectOptions: ['1', '2', '7', '52', '100']
+    },
+	{
+      data: 'phasename',
+	  editor: 'select',
+      selectOptions: ['Bluete', 'Blattentfaltung', 'Fruchtreife']
+    },
+	{
+      data: 'plantspecies',
+	  editor: 'select',
+      selectOptions: ['Hasel', 'Schneegloeckchen', 'Kastanie', 'Stachelbeere', 'Johannesbeere']
+    },
+    {
+      data: 'size',
+      editor: 'select',
+      selectOptions: ['small', 'medium', 'large']
+    },
+    {
+      data: 'color'
+    }
+  ],
+  minSpareRows: 1,
+  // Updaten der Marker, wenn die Tabelle veraendert wird
+  afterChange: dataToMarkers  
+});
+
+function onCellClick() {  
+    if (cellProperties.instance.getSettings().clickBeginsEditing) {
+      that.TEXTAREA.value = that.originalValue;
+      that.instance.destroyEditor();
+      that.beginEditing(row, col, prop, true);
+    }
+  }
+
+//this.instance.view.wt.update('onCellClick', onCellClick);
+
+function dataToMarkers() {
+  // Neues geojson-Objekt, das die Tabellenwerte angibt.
+  var geojson = { type: 'FeatureCollection', features: [] };
+  // Erstellt einen Marker fuer jede Tabellenzeile.
+  for (var i = 0; i < data.length; i++) {
+    // Verhindern von leeren Zeilen in der Tabelle.
+    if (data[i].lon === null || data[i].lat === null) continue;
+    geojson.features.push({
+      type: 'Feature',
+      geometry: {
+        type: 'Point',
+        coordinates: [ data[i].lon, data[i].lat]
+      },
+      properties: {
+        'marker-size': data[i].size,
+        'marker-color': data[i].color,
+        'title': data[i].name
+      }
+    });
+  }
+  dataLayer.setGeoJSON(geojson);
+}
+
+  
+// Abgreifen von Koordinaten eines beliebeigen Standortes durch Klicken im Map-View
+// Die Koordinaten fur die Position, die angeklickt wurde, werden in einem Popup angezeigt
+// und koennen als Pflanzenstandort in die Tabelle eingetragen werden
+var popup = L.popup();
+
+		function onMapClick(e) {
+			popup
+				.setLatLng(e.latlng)
+				.setContent("Koordinaten an dieser Stelle " + e.latlng.toString())
+				.openOn(map);
+		}
+
+		map.on('click', onMapClick);
+
+
+//Ermitteln der User-Location:
+		
+		//Setzt einen Marker an die User-Location 
+		//und erstellt in einem 15m Radius einen Kreis um die User-Location
+		function onLocationFound(e) {
+			 var radius = parseInt( e.accuracy / 2);
+
+			L.marker(e.latlng).addTo(map)
+				.bindPopup("You are within " + radius + " meters from this point").openPopup();
+
+			L.circle(e.latlng, radius).addTo(map);
+		}
+
+		function onLocationError(e) {
+			alert(e.message);
+		}
+
+		map.on('locationfound', onLocationFound);
+		map.on('locationerror', onLocationError);
+
+		//Setzt den Map-View auf die aktuelle User-Location
+		map.locate({setView: true, maxZoom: 16});
+
+</script>
+
+</body>
+</html>
+
